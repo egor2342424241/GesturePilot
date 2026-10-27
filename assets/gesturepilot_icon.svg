@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#101b35"/><stop offset=".55" stop-color="#263b70"/><stop offset="1" stop-color="#0b1223"/></linearGradient><linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#a7f5ff" stop-opacity=".96"/><stop offset="1" stop-color="#5d8dff" stop-opacity=".88"/></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+<rect x="8" y="8" width="240" height="240" rx="58" fill="url(#bg)" stroke="#8eeaff" stroke-opacity=".55" stroke-width="3"/>
+<path d="M28 70 Q70 16 138 25" fill="none" stroke="#fff" stroke-opacity=".24" stroke-width="7" stroke-linecap="round"/>
+<circle cx="160" cy="91" r="39" fill="none" stroke="#66e8ff" stroke-opacity=".8" stroke-width="3"/><circle cx="160" cy="91" r="25" fill="none" stroke="#66e8ff" stroke-opacity=".48" stroke-width="2"/>
+<path d="M83 201 L83 129 Q83 118 94 118 Q105 118 105 130 L105 151 L105 95 Q105 84 116 84 Q127 84 127 95 L127 145 L127 77 Q127 66 138 66 Q149 66 149 77 L149 143 L149 91 Q149 80 160 80 Q171 80 171 91 L171 153 L181 136 Q187 126 197 132 Q207 138 201 149 L177 190 Q170 204 151 207 L111 211 Q94 211 83 201Z" fill="url(#glass)" stroke="#e7fcff" stroke-width="3" stroke-linejoin="round" filter="url(#glow)"/>
+<path d="M190 44 L196 59 L212 65 L196 71 L190 87 L184 71 L168 65 L184 59Z" fill="#f2ffff"/><circle cx="62" cy="87" r="4" fill="#7ef3ff"/><circle cx="202" cy="104" r="3" fill="#7ef3ff"/>
+</svg>
