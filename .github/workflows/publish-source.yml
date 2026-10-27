@@ -26,7 +26,7 @@ jobs:
           unzip -q "$archive" -d /tmp/gesturepilot
           source_dir="$(find /tmp/gesturepilot -mindepth 1 -maxdepth 1 -type d | head -n 1)"
           test -n "$source_dir"
-          rsync -a --exclude='__pycache__/' --exclude='*.pyc' "$source_dir"/ ./
+          rsync -a --exclude='__pycache__/' --exclude='*.pyc' --exclude='.github/' "$source_dir"/ ./
           rm -f "$archive"
       - name: Commit source files
         run: |
