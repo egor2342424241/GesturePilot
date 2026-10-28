@@ -470,7 +470,7 @@ class HandWorker(QThread):
         self._active_camera_index = int(index)
         self.status.emit(f"Подключение к камере {index}…")
         try:
-            cap, capture_info = _open_camera_capture(index, 1280, 720, 30)
+            cap, capture_info = _open_camera_capture(index, 640, 480, 30)
             if cap is None:
                 self._cap = None
                 self._camera_failed_index = int(index)
@@ -948,7 +948,9 @@ class HandWorker(QThread):
             with mp_hands.Hands(
                 static_image_mode=False,
                 max_num_hands=2,
-                model_complexity=1,
+                # Lite model reduces CPU load on Windows laptops and UVC cameras.
+                # Keep two-hand support, but process at VGA resolution.
+                model_complexity=0,
                 min_detection_confidence=0.58,
                 min_tracking_confidence=0.62,
             ) as hands:
