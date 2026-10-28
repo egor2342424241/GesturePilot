@@ -128,6 +128,7 @@ class Settings:
     secondary_camera_index: int = 1
     camera_mode: str = "single"
     sensitivity: float = 1.0
+    scroll_sensitivity: float = 3.0
     smoothing: float = 0.28
     show_landmarks: bool = True
     control_enabled: bool = False
@@ -189,6 +190,7 @@ class HandWorker(QThread):
         self._active_camera_index = None
         self._camera_failed_index = None
         self._sensitivity = settings.sensitivity
+        self._scroll_sensitivity = max(0.5, min(10.0, float(getattr(settings, "scroll_sensitivity", 3.0))))
         self._smoothing = settings.smoothing
         self._adaptive_smoothing = bool(getattr(settings, "adaptive_smoothing", True))
         self._profile = settings.active_profile
@@ -265,6 +267,9 @@ class HandWorker(QThread):
 
     def set_sensitivity(self, value):
         self._sensitivity = max(0.3, min(2.5, value))
+
+    def set_scroll_sensitivity(self, value):
+        self._scroll_sensitivity = max(0.5, min(10.0, float(value)))
 
     def set_smoothing(self, value):
         self._smoothing = max(0.05, min(0.95, value))
@@ -673,7 +678,7 @@ class HandWorker(QThread):
             # Ignore tiny camera jitter. Moving the hand up (delta_y < 0)
             # intentionally scrolls DOWN; moving it down scrolls UP.
             if abs(delta_y) >= 0.004:
-                self._scroll_accumulator += delta_y * 180.0
+                self._scroll_accumulator += delta_y * 180.0 * self._scroll_sensitivity
                 steps = int(self._scroll_accumulator)
                 if steps:
                     pyautogui.scroll(steps)
@@ -1444,6 +1449,7 @@ class MainWindow(QMainWindow):
         if not isinstance(saved_actions, dict):
             saved_actions = {}
         self.settings = Settings(
+            scroll_sensitivity=float(self.settings_store.value("mouse/scroll_sensitivity", 3.0)),
             window_actions_enabled=self.settings_store.value("window/actions_enabled", False, type=bool),
             gesture_actions={g: str(saved_actions.get(g, "Нет действия")) for g in self.GESTURES},
         )
@@ -1608,6 +1614,16 @@ class MainWindow(QMainWindow):
         self.sensitivity_slider.setValue(100)
         self.sensitivity_slider.valueChanged.connect(self.change_sensitivity)
         cl.addWidget(self.sensitivity_slider)
+        self.scroll_sensitivity_label = QLabel(f"Чувствительность прокрутки  ·  {int(self.settings.scroll_sensitivity * 100)}%")
+        self.scroll_sensitivity_label.setObjectName("muted")
+        cl.addWidget(self.scroll_sensitivity_label)
+        self.scroll_sensitivity_slider = QSlider(Qt.Orientation.Horizontal)
+        self.scroll_sensitivity_slider.setRange(50, 1000)
+        self.scroll_sensitivity_slider.setSingleStep(50)
+        self.scroll_sensitivity_slider.setPageStep(100)
+        self.scroll_sensitivity_slider.setValue(max(50, min(1000, int(self.settings.scroll_sensitivity * 100))))
+        self.scroll_sensitivity_slider.valueChanged.connect(self.change_scroll_sensitivity)
+        cl.addWidget(self.scroll_sensitivity_slider)
         self.smoothing_label = QLabel("Плавность  ·  28%")
         self.smoothing_label.setObjectName("muted")
         cl.addWidget(self.smoothing_label)
@@ -1979,6 +1995,15 @@ class MainWindow(QMainWindow):
         self.sensitivity_label.setText(f"Чувствительность курсора  ·  {value}%")
         if self.worker:
             self.worker.set_sensitivity(self.settings.sensitivity)
+
+    def change_scroll_sensitivity(self, value):
+        self.settings.scroll_sensitivity = value / 100.0
+        self.scroll_sensitivity_label.setText(f"Чувствительность прокрутки  ·  {value}%")
+        self.settings_store.setValue("mouse/scroll_sensitivity", self.settings.scroll_sensitivity)
+        if self.worker:
+            self.worker.set_scroll_sensitivity(self.settings.scroll_sensitivity)
+        if self.aux_worker and hasattr(self.aux_worker, "set_scroll_sensitivity"):
+            self.aux_worker.set_scroll_sensitivity(self.settings.scroll_sensitivity)
 
     def change_smoothing(self, value):
         self.settings.smoothing = value / 100.0
