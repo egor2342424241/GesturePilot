@@ -2,6 +2,7 @@ import sys
 import os
 import math
 import time
+import threading
 import traceback
 from dataclasses import dataclass
 
@@ -228,6 +229,8 @@ class HandWorker(QThread):
         self._magnetic_highlight = bool(getattr(settings, "magnetic_highlight", True))
         self._uia_cache = []
         self._uia_cache_at = 0.0
+        self._uia_scan_lock = threading.Lock()
+        self._uia_scan_in_progress = False
         self._magnetic_last_target = None
         self._gesture_actions = dict(getattr(settings, "gesture_actions", None) or {})
         self._gesture_candidate = None
@@ -293,49 +296,65 @@ class HandWorker(QThread):
             self.magnetic_target.emit(None)
 
     def _get_uia_targets(self, now):
-        """Get cached clickable UI Automation rectangles. Optional pywinauto dependency."""
+        """Return cached UIA targets immediately; schedule expensive discovery off the camera thread."""
         if sys.platform != "win32":
-            return []
-        if now - self._uia_cache_at < 0.50:
             return self._uia_cache
-        self._uia_cache_at = now
-        targets = []
-        try:
-            from pywinauto import Desktop
-            # Enumerate only visible, enabled, interactive controls; never invoke them.
-            desktop = Desktop(backend="uia")
-            for win in desktop.windows(visible_only=True, enabled_only=True):
-                try:
-                    rect = win.rectangle()
-                    if rect.width() < 2 or rect.height() < 2:
-                        continue
-                    for el in win.descendants():
-                        try:
-                            info = el.element_info
-                            if not info.enabled or not info.visible:
-                                continue
-                            ctype = str(getattr(info, "control_type", ""))
-                            if ctype not in {"Button", "SplitButton", "MenuItem", "TabItem", "ListItem", "CheckBox", "RadioButton", "Hyperlink", "TitleBar"}:
-                                continue
-                            r = el.rectangle()
-                            w, h = r.width(), r.height()
-                            if w < 5 or h < 5 or w > 600 or h > 180:
-                                continue
-                            # Exclude this app's own window to avoid attracting to its settings.
-                            title = str(getattr(win.element_info, "name", ""))
-                            if "GesturePilot" in title:
-                                continue
-                            targets.append((int(r.left), int(r.top), int(r.right), int(r.bottom), ctype))
-                        except Exception:
-                            continue
-                except Exception:
-                    continue
-        except Exception:
-            # UIA is best-effort: if unavailable, cursor control keeps working normally.
-            targets = []
-        self._uia_cache = targets[:900]
+
+        # Never enumerate Windows UI Automation synchronously in the camera loop:
+        # some desktop apps expose thousands of descendants and can stall video.
+        if now - self._uia_cache_at >= 0.75:
+            start_scan = False
+            with self._uia_scan_lock:
+                if not self._uia_scan_in_progress:
+                    self._uia_scan_in_progress = True
+                    start_scan = True
+            if start_scan:
+                threading.Thread(target=self._scan_uia_targets, name="GesturePilot-UIA", daemon=True).start()
         return self._uia_cache
 
+    def _scan_uia_targets(self):
+        """Discover clickable UI controls in a daemon thread so tracking stays responsive."""
+        targets = []
+        try:
+            if sys.platform == "win32":
+                from pywinauto import Desktop
+                desktop = Desktop(backend="uia")
+                # Bound the amount of work per scan. Some applications expose huge
+                # accessibility trees; skipping their deep descendants is safer than
+                # blocking hand tracking.
+                windows = desktop.windows(visible_only=True, enabled_only=True)
+                for win in windows[:35]:
+                    try:
+                        title = str(getattr(win.element_info, "name", ""))
+                        if "GesturePilot" in title:
+                            continue
+                        for el in win.descendants():
+                            try:
+                                info = el.element_info
+                                if not info.enabled or not info.visible:
+                                    continue
+                                ctype = str(getattr(info, "control_type", ""))
+                                if ctype not in {"Button", "SplitButton", "MenuItem", "TabItem", "ListItem", "CheckBox", "RadioButton", "Hyperlink", "TitleBar"}:
+                                    continue
+                                r = el.rectangle()
+                                w, h = r.width(), r.height()
+                                if w < 5 or h < 5 or w > 600 or h > 180:
+                                    continue
+                                targets.append((int(r.left), int(r.top), int(r.right), int(r.bottom), ctype))
+                                if len(targets) >= 500:
+                                    return
+                            except Exception:
+                                continue
+                    except Exception:
+                        continue
+        except Exception:
+            # UIA is best-effort; cursor control must remain available without it.
+            targets = []
+        finally:
+            self._uia_cache = targets[:500]
+            self._uia_cache_at = time.monotonic()
+            with self._uia_scan_lock:
+                self._uia_scan_in_progress = False
     def _magnet_target(self, x, y, now):
         if not self._magnetic_enabled or self._left_down or self._right_down:
             if self._magnetic_last_target is not None:
