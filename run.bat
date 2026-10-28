@@ -14,7 +14,7 @@ if not exist "%PYTHON_EXE%" (
   )
 )
 
-"%PYTHON_EXE%" -c "import cv2, mediapipe, pyautogui, PySide6" >nul 2>&1
+"%PYTHON_EXE%" -c "import cv2, mediapipe, pyautogui, pywinauto, PySide6" >nul 2>&1
 if errorlevel 1 (
   echo [GesturePilot] Installing required packages. Internet is needed for this first setup...
   "%PYTHON_EXE%" -m pip install --upgrade pip
