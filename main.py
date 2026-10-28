@@ -1426,7 +1426,9 @@ class MainWindow(QMainWindow):
         self.resize(1320, 850)
         self.setMinimumSize(980, 680)
         self.settings_store = QSettings("GesturePilot", "GesturePilot")
-        saved_actions = self.settings_store.value("window/gesture_actions", {}, type=dict)
+        # PySide6 QSettings.value() does not accept dict as its type= parameter.
+        # Read the value normally, then validate it below.
+        saved_actions = self.settings_store.value("window/gesture_actions", {})
         if not isinstance(saved_actions, dict):
             saved_actions = {}
         self.settings = Settings(
