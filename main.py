@@ -5,17 +5,8 @@ import time
 import traceback
 from dataclasses import dataclass
 
-# Make Windows report physical desktop coordinates correctly when display scaling
-# is enabled (e.g. 125% or 150%). This must run before querying screen dimensions.
-if sys.platform == "win32":
-    try:
-        import ctypes
-        try:
-            ctypes.windll.shcore.SetProcessDpiAwareness(2)  # Per-monitor DPI aware
-        except Exception:
-            ctypes.windll.user32.SetProcessDPIAware()
-    except Exception:
-        pass
+# Qt 6 configures Windows per-monitor DPI awareness itself. Avoid setting a
+# competing process DPI context here, which causes a Qt platform warning.
 
 import cv2
 import mediapipe as mp
