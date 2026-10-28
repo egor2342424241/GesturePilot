@@ -39,6 +39,12 @@ jobs:
           python -c "import cv2, mediapipe, pyautogui, pywinauto, PySide6; import main; print('Import smoke test passed')"
           python -c "import tempfile; from pathlib import Path; from PySide6.QtCore import QSettings; p=Path(tempfile.gettempdir()) / 'gesturepilot-settings-smoke.ini'; s=QSettings(str(p), QSettings.Format.IniFormat); s.setValue('window/gesture_actions', {'Открытая ладонь':'Escape'}); s.sync(); value=QSettings(str(p), QSettings.Format.IniFormat).value('window/gesture_actions', {}); assert isinstance(value, dict), repr(value); p.unlink(missing_ok=True); print('QSettings round-trip passed')"
 
+      - name: Construct UI offscreen (without camera workers)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python -c "import os; os.environ['QT_QPA_PLATFORM']='offscreen'; import main; from PySide6.QtWidgets import QApplication; app=QApplication([]); main.MainWindow._start_worker=lambda self: None; w=main.MainWindow(); assert w.windowTitle(); w.close(); app.quit(); print('UI construction smoke test passed')"
+
       - name: Build standalone EXE
         shell: pwsh
         run: pyinstaller --noconfirm --clean --onefile --windowed --name GesturePilot --icon assets/gesturepilot.ico --add-data "assets;assets" --collect-all mediapipe --collect-all cv2 main.py
