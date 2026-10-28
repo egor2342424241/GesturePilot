@@ -381,6 +381,8 @@ class HandWorker(QThread):
                         targets.append((int(r.left), int(r.top), int(r.right), int(r.bottom), ctype))
                         if len(targets) >= 500:
                             break
+                    except Exception:
+                        continue
         except Exception:
             # UIA is best-effort; cursor control must remain available without it.
             targets = []
