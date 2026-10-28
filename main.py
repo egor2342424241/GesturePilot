@@ -231,6 +231,7 @@ class HandWorker(QThread):
         self._magnetic_highlight = bool(getattr(settings, "magnetic_highlight", True))
         self._uia_cache = []
         self._uia_cache_at = 0.0
+        self._uia_foreground_hwnd = None
         self._uia_scan_lock = threading.Lock()
         self._uia_scan_in_progress = False
         self._magnetic_last_target = None
@@ -301,12 +302,25 @@ class HandWorker(QThread):
             self.magnetic_target.emit(None)
 
     def _get_uia_targets(self, now):
-        """Return cached UIA targets immediately; schedule expensive discovery off the camera thread."""
+        """Return controls from the foreground app only; never include desktop icons behind it."""
         if sys.platform != "win32":
             return self._uia_cache
 
-        # Never enumerate Windows UI Automation synchronously in the camera loop:
-        # some desktop apps expose thousands of descendants and can stall video.
+        try:
+            import ctypes
+            foreground_hwnd = int(ctypes.windll.user32.GetForegroundWindow())
+        except Exception:
+            foreground_hwnd = 0
+
+        # A foreground-window change invalidates old rectangles immediately, so
+        # controls from the previous app cannot keep attracting the cursor.
+        if foreground_hwnd != self._uia_foreground_hwnd:
+            self._uia_foreground_hwnd = foreground_hwnd
+            self._uia_cache = []
+            self._uia_cache_at = 0.0
+            self._magnetic_last_target = None
+            self.magnetic_target.emit(None)
+
         if now - self._uia_cache_at >= 0.75:
             start_scan = False
             with self._uia_scan_lock:
@@ -314,52 +328,78 @@ class HandWorker(QThread):
                     self._uia_scan_in_progress = True
                     start_scan = True
             if start_scan:
-                threading.Thread(target=self._scan_uia_targets, name="GesturePilot-UIA", daemon=True).start()
+                threading.Thread(
+                    target=self._scan_uia_targets,
+                    args=(foreground_hwnd,),
+                    name="GesturePilot-UIA",
+                    daemon=True,
+                ).start()
         return self._uia_cache
 
-    def _scan_uia_targets(self):
-        """Discover clickable UI controls in a daemon thread so tracking stays responsive."""
+    def _scan_uia_targets(self, expected_hwnd=None):
+        """Discover controls in just the active foreground window, off the camera thread."""
         targets = []
+        scanned_hwnd = 0
         try:
             if sys.platform == "win32":
+                import ctypes
                 from pywinauto import Desktop
+
+                user32 = ctypes.windll.user32
+                scanned_hwnd = int(expected_hwnd or user32.GetForegroundWindow())
+                if not scanned_hwnd:
+                    return
+
+                # The shell desktop itself is not an application window. Do not
+                # enumerate Progman/WorkerW, which exposes desktop icons as targets.
+                class_buffer = ctypes.create_unicode_buffer(256)
+                user32.GetClassNameW(scanned_hwnd, class_buffer, len(class_buffer))
+                window_class = class_buffer.value
+                if window_class in {"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"}:
+                    return
+
                 desktop = Desktop(backend="uia")
-                # Bound the amount of work per scan. Some applications expose huge
-                # accessibility trees; skipping their deep descendants is safer than
-                # blocking hand tracking.
-                windows = desktop.windows(visible_only=True, enabled_only=True)
-                for win in windows[:35]:
+                win = desktop.window(handle=scanned_hwnd).wrapper_object()
+                title = str(getattr(win.element_info, "name", ""))
+                if "GesturePilot" in title:
+                    return
+
+                # Only descendants of the foreground app are eligible. Other visible
+                # windows, including desktop shortcuts behind the app, are ignored.
+                for el in win.descendants():
                     try:
-                        title = str(getattr(win.element_info, "name", ""))
-                        if "GesturePilot" in title:
+                        info = el.element_info
+                        if not info.enabled or not info.visible:
                             continue
-                        for el in win.descendants():
-                            try:
-                                info = el.element_info
-                                if not info.enabled or not info.visible:
-                                    continue
-                                ctype = str(getattr(info, "control_type", ""))
-                                if ctype not in {"Button", "SplitButton", "MenuItem", "TabItem", "ListItem", "CheckBox", "RadioButton", "Hyperlink", "TitleBar"}:
-                                    continue
-                                r = el.rectangle()
-                                w, h = r.width(), r.height()
-                                if w < 5 or h < 5 or w > 600 or h > 180:
-                                    continue
-                                targets.append((int(r.left), int(r.top), int(r.right), int(r.bottom), ctype))
-                                if len(targets) >= 500:
-                                    return
-                            except Exception:
-                                continue
-                    except Exception:
-                        continue
+                        ctype = str(getattr(info, "control_type", ""))
+                        if ctype not in {"Button", "SplitButton", "MenuItem", "TabItem", "ListItem", "CheckBox", "RadioButton", "Hyperlink", "TitleBar"}:
+                            continue
+                        r = el.rectangle()
+                        w, h = r.width(), r.height()
+                        if w < 5 or h < 5 or w > 600 or h > 180:
+                            continue
+                        targets.append((int(r.left), int(r.top), int(r.right), int(r.bottom), ctype))
+                        if len(targets) >= 500:
+                            break
         except Exception:
             # UIA is best-effort; cursor control must remain available without it.
             targets = []
         finally:
-            self._uia_cache = targets[:500]
-            self._uia_cache_at = time.monotonic()
+            try:
+                import ctypes
+                current_hwnd = int(ctypes.windll.user32.GetForegroundWindow()) if sys.platform == "win32" else scanned_hwnd
+            except Exception:
+                current_hwnd = scanned_hwnd
+            # Do not publish a result if focus changed while UI Automation was scanning.
+            if current_hwnd == scanned_hwnd and scanned_hwnd == self._uia_foreground_hwnd:
+                self._uia_cache = targets[:500]
+                self._uia_cache_at = time.monotonic()
+            else:
+                self._uia_cache = []
+                self._uia_cache_at = 0.0
             with self._uia_scan_lock:
                 self._uia_scan_in_progress = False
+
     def _magnet_target(self, x, y, now):
         if not self._magnetic_enabled or self._left_down or self._right_down:
             if self._magnetic_last_target is not None:
