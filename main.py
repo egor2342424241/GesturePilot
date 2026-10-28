@@ -21,13 +21,13 @@ import cv2
 import mediapipe as mp
 import pyautogui
 
-from PySide6.QtCore import Qt, QThread, Signal, Slot, QTimer, QSize, QRectF, QPointF, QUrl
+from PySide6.QtCore import Qt, QThread, Signal, Slot, QTimer, QSize, QRectF, QPointF, QUrl, QSettings
 from PySide6.QtGui import (QImage, QPixmap, QFont, QPainter, QColor, QBrush, QLinearGradient,
                            QRadialGradient, QPen, QPainterPath, QIcon, QDesktopServices)
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton, QComboBox,
     QSlider, QCheckBox, QVBoxLayout, QHBoxLayout, QGridLayout, QFrame,
-    QFormLayout, QTabWidget, QScrollArea, QSizePolicy, QMessageBox, QSettings
+    QFormLayout, QTabWidget, QScrollArea, QSizePolicy, QMessageBox
 )
 
 APP_NAME = "GesturePilot"
