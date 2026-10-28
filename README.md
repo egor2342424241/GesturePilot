@@ -72,7 +72,7 @@ GesturePilot — приложение для Windows, которое позво�
 
 ## Сборка EXE
 
-В репозитории предусмотрен GitHub Actions workflow `.github/workflows/build-windows.yml`. После загрузки проекта в GitHub откройте вкладку **Actions**, запустите workflow **Build Windows EXE** через **Run workflow** или отправьте новый коммит. Сборка выполняется на Windows runner, после чего в результате workflow появится артефакт `GesturePilot-Windows-EXE`, который можно скачать.
+В репозитории предусмотрен GitHub Actions workflow `.github/workflows/build-exe.yml` (**Build GesturePilot EXE**). Откройте вкладку **Actions** и запустите его через **Run workflow** либо отправьте коммит с изменением `main.py`, `requirements.txt`, `assets/**` или файла workflow. Перед упаковкой workflow проверяет синтаксис Python, импорт модулей и сохранение/чтение словаря через `QSettings`. Готовый файл `GesturePilot.exe` доступен в артефакте `GesturePilot-Windows-x64`.
 
 Вручную на Windows можно собрать так:
 
